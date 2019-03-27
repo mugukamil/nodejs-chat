@@ -1,0 +1,32 @@
+extends layout
+
+block content
+  .row.justify-content-center.mt-2
+    .col-sm-6
+      form.login-form
+        p
+          label(for='reg_login')
+            | username
+            span.required *
+          input#reg_login.input-text.form-control(type='text', name='username', value='', required='')
+        p
+          label(for='reg_password')
+            | Password 
+            span.required *
+          input.input-text.form-control(type='password', name='password', required='')
+        p.form-row
+          input.btn.btn-brand.btn-lg.mb-4.mt-3(type='submit',name='register', value='Sign Up')
+  script.
+    const loginForm = document.querySelector('.login-form')
+    
+    loginForm.addEventListener('submit', function(evt) {
+      evt.preventDefault();
+      const formData = new FormData(this)
+      
+      fetch('/login', {
+        method: 'POST',
+        body: formData
+      }).then(res => res.status === 200 ? window.location.href = '/chat' : alert('err'))
+    })
+
+

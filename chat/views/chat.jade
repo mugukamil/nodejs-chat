@@ -1,0 +1,40 @@
+extends layout
+
+block content
+  .row.justify-content-center.mt-2
+    .col-sm-6
+      ul.chat
+      form.chat-form
+        input.form-control(placeholder="message...")
+  
+  script(src="/socket.io/socket.io.js")
+  script.
+      const socket = io()
+
+      const form = document.querySelector('.chat-form')
+      const ul = document.querySelector('.chat')
+      
+      const appendElTo = (text, el, append) => {
+        const elem = document.createElement(el)
+        elem.textContent = text
+
+        append.appendChild(elem)
+      }
+
+      
+      form.addEventListener('submit', function(evt) {
+        evt.preventDefault()
+        const input = this.querySelector('input')
+        const text = input.value
+        input.value = ''
+        
+        socket.emit('message', text)
+        
+      })
+      
+      socket.on('message', text => {
+        appendElTo(text, 'li', ul)
+      }).on('leave', user => appendElTo(`${user} left chat`, 'li', ul))
+      .on('join', user => appendElTo(`${user} connected`, 'li', ul))
+
+

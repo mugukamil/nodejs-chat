@@ -1,0 +1,149 @@
+#!/usr/bin/env node
+
+/**
+ * Module dependencies.
+ */
+
+const app = require("../app");
+const debug = require("debug")("chat:server");
+const http = require("http");
+
+/**
+ * Get port from environment and store in Express.
+ */
+
+const port = normalizePort(process.env.PORT || "3000");
+app.set("port", port);
+
+/**
+ * Create HTTP server.
+ */
+
+const server = http.createServer(app);
+
+/**
+ * Listen on provided port, on all network interfaces.
+ */
+
+server.listen(port);
+server.on("error", onError);
+server.on("listening", onListening);
+
+/**
+ * Normalize a port into a number, string, or false.
+ */
+
+function normalizePort(val) {
+  let port = parseInt(val, 10);
+
+  if (isNaN(port)) {
+    // named pipe
+    return val;
+  }
+
+  if (port >= 0) {
+    // port number
+    return port;
+  }
+
+  return false;
+}
+
+/**
+ * Event listener for HTTP server "error" event.
+ */
+
+function onError(error) {
+  if (error.syscall !== "listen") {
+    throw error;
+  }
+
+  let bind = typeof port === "string" ? "Pipe " + port : "Port " + port;
+
+  // handle specific listen errors with friendly messages
+  switch (error.code) {
+    case "EACCES":
+      console.error(bind + " requires elevated privileges");
+      process.exit(1);
+      break;
+    case "EADDRINUSE":
+      console.error(bind + " is already in use");
+      process.exit(1);
+      break;
+    default:
+      throw error;
+  }
+}
+
+/**
+ * Event listener for HTTP server "listening" event.
+ */
+
+function onListening() {
+  const addr = server.address();
+  const bind = typeof addr === "string" ? "pipe " + addr : "port " + addr.port;
+  debug("Listening on " + bind);
+}
+
+const io = require("socket.io")(server);
+const cookieParser = require("cookie-parser");
+const cookie = require("cookie");
+const sessionStore = require("../lib/sessionStore");
+const { User } = require("../models/user");
+
+// const loadSession = (sid, cb) => sessionStore.load(sid, (err, session) => {});
+
+io.use((socket, next) => {
+  const handshake = socket.request;
+
+  new Promise((resolve, reject) => {
+    handshake.cookies = cookie.parse(handshake.headers.cookie || "");
+
+    const sidCookie = handshake.cookies["connect.sid"];
+    const sid = cookieParser.signedCookie(sidCookie, "secret");
+
+    sessionStore.load(sid, (err, session) => {
+      if (err) reject(err);
+
+      resolve(session);
+    });
+  })
+    .then(
+      session =>
+        new Promise((resolve, reject) => {
+          if (!session) reject(401);
+
+          socket.handshake.session = session;
+
+          if (!session.user) reject();
+
+          User.findById(session.user, (err, user) => {
+            if (err) return reject(err);
+
+            if (!user) {
+              reject(null);
+            }
+
+            resolve(user);
+          });
+        })
+    )
+    .then(
+      user =>
+        new Promise((resolve, reject) => {
+          if (!user) reject(403);
+
+          socket.handshake.user = user;
+          resolve();
+          next();
+        })
+    )
+    .catch(err => next(err));
+});
+
+io.on("connection", socket => {
+  const username = socket.handshake.user.get("username");
+  io.emit("join", username);
+  socket.on("message", data => io.emit("message", username, data));
+  socket.on("disconnect", data => io.emit("leave", username));
+});
